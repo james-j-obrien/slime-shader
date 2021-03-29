@@ -1,8 +1,3 @@
-[[block]]
-struct TextureBuffer {
-  texture : array<array<vec4<f32>, 1280>, 960>;
-};
-
 struct Agent {
 	position : vec2<f32>;
 	angle : f32;
@@ -46,14 +41,20 @@ fn scaleToRange01(state: u32) -> f32 {
   return f32(state) / 4294967295.0;
 }
 
-
 var pi: f32 = 3.1416;
 
 [[group(0), binding(0)]] var<uniform> params : Params;
 [[group(0), binding(1)]] var<uniform> frame_data : FrameData;
-[[group(0), binding(2)]] var<storage> texture_buffer : [[access(read_write)]] TextureBuffer;
+[[group(0), binding(2)]] var texture : [[access(read_write)]] texture_storage_2d<rgba32float>;
 [[group(0), binding(3)]] var<storage> agents_buffer : [[access(read_write)]] AgentsBuffer;
 
+fn sample(x: u32, y: u32) -> vec4<f32> {
+  return textureLoad(texture, vec2<i32>(i32(x), i32(y)));
+}
+
+fn store(x: u32, y: u32, texel: vec4<f32>) {
+  textureStore(texture, vec2<i32>(i32(x), i32(y)), texel);
+}
 
 fn sense(agent: Agent, angle_offset: f32) -> f32 {
   var sensor_angle: f32 = agent.angle + angle_offset;
@@ -68,10 +69,9 @@ fn sense(agent: Agent, angle_offset: f32) -> f32 {
     for(var off_y: i32 = -params.sensor_size; off_y <= params.sensor_size; off_y = off_y + 1) {
       var sample_x: u32 = min(params.width - 1u32, max(0, sensor_x + off_x));
       var sample_y: u32 = min(params.height - 1u32, max(0, sensor_y + off_y));
-      sum = sum + dot(vec4<f32>(1.0, 1.0, 1.0, 0.0), texture_buffer.texture[sample_y][sample_x]);
+      sum = sum + dot(vec4<f32>(1.0, 1.0, 1.0, 0.0), sample(sample_x, sample_y));
     }
   }
-
   return sum;
 }
 
@@ -122,7 +122,7 @@ fn update_agents(
     angle = randomAngle;
   }
 
-  texture_buffer.texture[u32(pos.y)][u32(pos.x)] = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+  store(u32(pos.x), u32(pos.y), vec4<f32>(1.0, 1.0, 1.0, 1.0));
   
   agents_buffer.agents[id.x].position = pos;
   agents_buffer.agents[id.x].angle = angle;
@@ -135,7 +135,7 @@ fn post_process(
   if (id.x >= params.width || id.y >= params.height) {
     return;
   }
-  var cur : vec4<f32> = texture_buffer.texture[id.y][id.x];
+  var cur : vec4<f32> = sample(id.x, id.y);
   cur = cur * (1.0 - 0.02 * frame_data.delta * params.speed);
-  texture_buffer.texture[id.y][id.x] = cur;
+  store(id.x, id.y, cur);
 }

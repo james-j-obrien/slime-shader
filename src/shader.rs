@@ -25,7 +25,6 @@ pub struct Shader {
     agent_pipeline: wgpu::ComputePipeline,
     post_pipeline: wgpu::ComputePipeline,
 
-    texture_buffer: wgpu::Buffer,
     texture: wgpu::Texture,
 
     frame_data_buffer: wgpu::Buffer,
@@ -34,9 +33,13 @@ pub struct Shader {
 }
 
 impl Shader {
+    fn required_features() -> wgpu::Features {
+        wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+    }
+
     fn setup_compute_bind(
         device: &wgpu::Device,
-        texture: &wgpu::Buffer
+        texture: &wgpu::Texture
     ) -> (wgpu::BindGroupLayout, wgpu::BindGroup, wgpu::Buffer) {
         let param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Param buffer"),
@@ -89,10 +92,10 @@ impl Shader {
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
                         visibility: wgpu::ShaderStage::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size:  wgpu::BufferSize::new((WIDTH * HEIGHT * 4 * 4).into()),
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::ReadWrite,
+                            format: wgpu::TextureFormat::Rgba32Float,
+                            view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,
                     },
@@ -110,6 +113,9 @@ impl Shader {
                 label: None,
             });
 
+        let texture_view = texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
         let compute_bind_group = device.create_bind_group( &wgpu::BindGroupDescriptor {
             layout: &compute_bind_group_layout,
                 entries: &[
@@ -123,7 +129,7 @@ impl Shader {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: texture.as_entire_binding(),
+                        resource: wgpu::BindingResource::TextureView(&texture_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
@@ -300,13 +306,6 @@ impl framework::Shader for Shader {
             flags,
         });
 
-        let texture_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Texture buffer"),
-            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_SRC,
-            size: WIDTH as u64 * HEIGHT as u64 * 4 * 4,
-            mapped_at_creation: false,
-        });
-
         let texture_format = wgpu::TextureFormat::Rgba32Float;
         let texture_descriptor = wgpu::TextureDescriptor {
             label: Some("Texture descriptor"),
@@ -320,13 +319,13 @@ impl framework::Shader for Shader {
             dimension: wgpu::TextureDimension::D2,
             format: texture_format,
             usage: wgpu::TextureUsage::SAMPLED 
-                | wgpu::TextureUsage::RENDER_ATTACHMENT 
-                | wgpu::TextureUsage::COPY_DST
+                | wgpu::TextureUsage::RENDER_ATTACHMENT
+                | wgpu::TextureUsage::STORAGE
         };
         let texture = device
             .create_texture(&texture_descriptor);
         let (compute_bind_group_layout, compute_bind_group, frame_data_buffer) =
-            Self::setup_compute_bind(device, &texture_buffer);
+            Self::setup_compute_bind(device, &texture);
 
         let agent_pipeline = 
             Self::setup_agent_compute(device, &compute_shader, &compute_bind_group_layout);
@@ -338,7 +337,6 @@ impl framework::Shader for Shader {
             Self::setup_render(sc_desc, device, &draw_shader, &texture);
 
         Shader {
-            texture_buffer,
             texture,
 
             compute_bind_group,
@@ -435,26 +433,6 @@ impl framework::Shader for Shader {
             cpass.set_bind_group(0, &self.compute_bind_group, &[]);
             cpass.dispatch(WIDTH, HEIGHT, 1);
         }
-        command_encoder.copy_buffer_to_texture(
-            wgpu::ImageCopyBuffer {
-                buffer: &self.texture_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(std::num::NonZeroU32::new(WIDTH * 16).unwrap()), //Texel size
-                    rows_per_image: Some(std::num::NonZeroU32::new(HEIGHT).unwrap()),
-                },
-            }, 
-            wgpu::ImageCopyTexture {
-                texture: &self.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::default()
-            },
-            wgpu::Extent3d {
-                width: WIDTH,
-                height: HEIGHT,
-                depth_or_array_layers: 1,
-            });
-
         command_encoder.push_debug_group("render texture");
         {
             // render pass

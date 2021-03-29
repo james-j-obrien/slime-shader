@@ -155,7 +155,7 @@ async fn setup<E: Shader>(title: &str) -> Setup {
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
-                features: (optional_features & adapter_features) | required_features,
+                features: (optional_features & adapter_features) | required_features | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
                 limits: needed_limits,
             },
             trace_dir.ok().as_ref().map(std::path::Path::new),
@@ -204,6 +204,9 @@ fn start<E: Shader>(
     let mut last_update_inst = Instant::now();
 
     log::info!("Entering render loop...");
+    let mut frames: usize = 0;
+    let mut frame_inst = Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
         *control_flow = if cfg!(feature = "metal-auto-capture") {
@@ -278,6 +281,12 @@ fn start<E: Shader>(
                 };
                 shader.render(&frame.output, &device, &queue, &spawner, last_update_inst.elapsed());
                 last_update_inst = Instant::now();
+                frames += 1;
+                if (Instant::now() - frame_inst).as_secs() > 0 {
+                    println!("{}", frames);
+                    frames = 0;
+                    frame_inst = Instant::now();
+                }
             }
             _ => {}
         }
