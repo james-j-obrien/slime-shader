@@ -79,7 +79,7 @@ async fn setup<E: Shader>(title: &str) -> Setup {
 
     let event_loop = EventLoop::new();
     let mut builder = winit::window::WindowBuilder::new();
-    builder = builder.with_inner_size(LogicalSize { width: WIDTH * 2, height: HEIGHT * 2 }).with_title(title);
+    builder = builder.with_inner_size(LogicalSize { width: WIDTH, height: HEIGHT }).with_title(title);
     #[cfg(windows_OFF)] // TODO
     {
         use winit::platform::windows::WindowBuilderExtWindows;
@@ -118,15 +118,7 @@ async fn setup<E: Shader>(title: &str) -> Setup {
     } else {
         wgpu::BackendBit::PRIMARY
     };
-    let power_preference = if let Ok(power_preference) = std::env::var("WGPU_POWER_PREF") {
-        match power_preference.to_lowercase().as_str() {
-            "low" => wgpu::PowerPreference::LowPower,
-            "high" => wgpu::PowerPreference::HighPerformance,
-            other => panic!("Unknown power preference: {}", other),
-        }
-    } else {
-        wgpu::PowerPreference::default()
-    };
+    let power_preference = wgpu::PowerPreference::HighPerformance;
     let instance = wgpu::Instance::new(backend);
     let (size, surface) = unsafe {
         let size = window.inner_size();

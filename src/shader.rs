@@ -6,18 +6,6 @@ use crate::framework;
 use crate::constants::*;
 
 #[repr(C)]
-#[derive(Copy, Clone)]
-struct Params {
-    num_agents: u32,
-    width: u32,
-    height: u32,
-    speed: f32,
-}
-
-unsafe impl bytemuck::Zeroable for Params {}
-unsafe impl bytemuck::Pod for Params {}
-
-#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 struct FrameData {
     frame_num: u32,
@@ -50,16 +38,9 @@ impl Shader {
         device: &wgpu::Device,
         texture: &wgpu::Buffer
     ) -> (wgpu::BindGroupLayout, wgpu::BindGroup, wgpu::Buffer) {
-        let params = Params {
-            num_agents: NUM_AGENTS,
-            width: WIDTH,
-            height: HEIGHT,
-            speed: 100.0,
-        };
-
         let param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Param buffer"),
-            contents: bytemuck::bytes_of(&params),
+            contents: bytemuck::bytes_of(&PARAMS),
             usage: wgpu::BufferUsage::UNIFORM
         });
 
